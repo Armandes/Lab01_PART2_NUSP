@@ -43,10 +43,9 @@ CREATE DATABASE lab01;
 ```
 3. Crie o arquivo `.env` na raiz do projeto:
 ```
-DATABASE_URL=postgresql://postgres:SUA_SENHA@localhost:5432/lab01
+DATABASE_URL=postgresql://postgres:SUA_SENHA@localhost:5432/lab01 (mude sua senha de acordo com seu banco local)
 ```
 
-> O arquivo `.env` está no `.gitignore` e nunca deve ser commitado.
 
 ---
 
