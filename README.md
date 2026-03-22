@@ -2,7 +2,7 @@
 
 **Aluno:** João Armandes Vieira Costa  
 **Disciplina:** Engenharia de Dados — Pós-Graduação  
-**Dataset:** [Gaming and Mental Health](https://www.kaggle.com) — 1.000.000 linhas × 39 colunas
+**Dataset:** [Gaming and Mental Health](https://www.kaggle.com/datasets/sharmajicoder/gaming-and-mental-health?resource=download) — 1.000.000 linhas × 39 colunas
 
 ---
 
