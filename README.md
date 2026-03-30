@@ -1,14 +1,40 @@
-# Lab01 — Ingestão de Dados End-to-End (Local)
+# Lab01-B — Ingestão de Dados End-to-End Containerizada
 
 **Aluno:** João Armandes Vieira Costa  
 **Disciplina:** Engenharia de Dados — Pós-Graduação  
-**Dataset:** [Gaming and Mental Health](https://www.kaggle.com/datasets/sharmajicoder/gaming-and-mental-health?resource=download) — 1.000.000 linhas × 39 colunas
+**Dataset:** [Gaming and Mental Health](https://www.kaggle.com) — 1.000.000 linhas × 39 colunas
 
 ---
 
-## Arquitetura — Medallion Architecture
+## Arquitetura
 ```
-CSV Original → Bronze (Raw) → Silver (Parquet) → Gold (PostgreSQL)
+CSV Original → Bronze (Raw) → Silver (Parquet) → Gold (PostgreSQL) → Metabase (BI)
+```
+
+### Infraestrutura Docker
+```
+docker-compose
+├── container: lab01_postgres    → banco de dados PostgreSQL
+├── container: lab01_pipeline    → scripts Python de ingestão
+└── container: lab01_metabase    → dashboard de BI
+        ↕               ↕               ↕
+                lab01_network
+              (rede Docker interna)
+```
+
+### Fluxo completo
+```
+[CSV Original]
+      ↓
+[Bronze] scripts/01_bronze.py
+      ↓ data/raw/
+[Silver] data/silver/cleaning.py + graphics.py
+      ↓ data/silver/dataset_clean.parquet
+[Validação] scripts/06_great_expectations.py
+      ↓ relatório HTML
+[Gold] data/gold/carga.py
+      ↓ PostgreSQL (container Docker)
+[BI] Metabase → localhost:3000
 ```
 
 | Camada | Objetivo | Saída |
@@ -16,67 +42,90 @@ CSV Original → Bronze (Raw) → Silver (Parquet) → Gold (PostgreSQL)
 | Bronze | Ingestão as-is, sem alterações | `data/raw/` + log |
 | Silver | Limpeza, padronização e análise exploratória | `data/silver/*.parquet` |
 | Gold | Modelagem Star Schema e carga no PostgreSQL | Tabelas no banco `lab01` |
-
----
-
-## Pré-requisitos
-
-### Dependências
-```bash
-pip install pandas seaborn matplotlib pyarrow sqlalchemy python-dotenv psycopg2-binary
-```
-
-| Biblioteca | Uso |
-|------------|-----|
-| pandas | Manipulação e limpeza dos dados |
-| seaborn / matplotlib | Geração de gráficos |
-| pyarrow | Leitura e escrita do formato Parquet |
-| sqlalchemy | Conexão e operações no PostgreSQL |
-| python-dotenv | Leitura do arquivo `.env` |
-| psycopg2-binary | Driver PostgreSQL para o SQLAlchemy |
-
-### Configuração do banco
-1. Instale o PostgreSQL localmente
-2. Crie o banco de dados:
-```sql
-CREATE DATABASE lab01;
-```
-3. Crie o arquivo `.env` na raiz do projeto:
-```
-DATABASE_URL=postgresql://postgres:SUA_SENHA@localhost:5432/lab01 (mude sua senha de acordo com seu banco local)
-```
-
+| BI | Dashboard com 5 visualizações | Metabase em `localhost:3000` |
 
 ---
 
 ## Estrutura do Projeto
 ```
-Lab01_PART1_NUSP/
+Lab01_PART2_NUSP/
 ├── data/
 │   ├── raw/                        # CSV original + log de ingestão
 │   ├── silver/
+│   │   ├── check.py                # Verificação geral dos dados
+│   │   ├── cleaning.py             # Limpeza e geração do Parquet
+│   │   ├── graphics.py             # Gráficos e relatório Markdown
 │   │   ├── dataset_clean.parquet   # Dataset limpo
-│   │   ├── relatorio_graficos.md   # Relatório com gráficos
 │   │   └── graficos/               # Imagens dos gráficos
-│   └── gold/                       # (referência — dados ficam no Postgres)
+│   └── gold/
+│       ├── carga.py                # Modelagem Star Schema + carga no Postgres
+│       └── metricas.py             # 5 queries de métricas de negócio
 ├── scripts/
-│   └── 01_bronze.py                # Ingestão Bronze
-├── data/silver/
-│   ├── check.py                    # Verificação geral dos dados
-│   ├── cleaning.py                 # Limpeza e geração do Parquet
-│   └── graphics.py                 # Gráficos e relatório Markdown
-├── data/gold/
-│   ├── carga.py                    # Modelagem Star Schema + carga no Postgres
-│   └── metricas.py                 # 5 queries de métricas de negócio
+│   ├── 01_bronze.py                # Ingestão Bronze
+│   └── 06_great_expectations.py    # Validação de dados
+├── Dockerfile                      # Imagem do pipeline Python
+├── docker-compose.yml              # Orquestração dos containers
+├── pyproject.toml                  # Dependências do projeto (uv)
+├── uv.lock                         # Versões travadas das dependências
 ├── .env                            # Credenciais do banco (não commitado)
 ├── .gitignore
-├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Ordem de Execução
+## Pré-requisitos
+
+- [Docker](https://www.docker.com/products/docker-desktop) instalado
+- [uv](https://astral.sh/uv) instalado
+
+### Instalar dependências localmente
+```bash
+uv sync
+```
+
+---
+
+## Como Reproduzir o Ambiente
+
+### 1. Clonar o repositório
+```bash
+git clone https://github.com/seu-usuario/Lab01_PART2_NUSP.git
+cd Lab01_PART2_NUSP
+```
+
+### 2. Configurar o arquivo `.env`
+Cria um arquivo `.env` na raiz do projeto:
+```
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/lab01
+```
+
+### 3. Construir e subir os containers
+```bash
+docker-compose up -d --build
+```
+
+### 4. Verificar os containers
+```bash
+docker-compose ps
+```
+
+Os seguintes containers devem estar rodando:
+
+| Container | Imagem | Porta |
+|-----------|--------|-------|
+| lab01_postgres | postgres:15 | 5432 |
+| lab01_pipeline | imagem local (Dockerfile) | — |
+| lab01_metabase | metabase/metabase:latest | 3000 |
+
+### 5. Parar os containers
+```bash
+docker-compose down
+```
+
+---
+
+## Ordem de Execução dos Scripts
 ```bash
 # 1. Camada Bronze — verifica o CSV e gera log
 python scripts/01_bronze.py
@@ -87,134 +136,88 @@ python data/silver/check.py
 # 3. Camada Silver — limpeza e geração do Parquet
 python data/silver/cleaning.py
 
-# 4. Camada Silver — gráficos e relatório Markdown (requer o Parquet)
+# 4. Camada Silver — gráficos e relatório Markdown
 python data/silver/graphics.py
 
 # 5. Camada Gold — carga no PostgreSQL em Star Schema
 python data/gold/carga.py
 
-# 6. Camada Gold — execução das métricas de negócio
+# 6. Camada Gold — métricas de negócio
 python data/gold/metricas.py
+
+# 7. Validação de dados com Great Expectations
+python scripts/06_great_expectations.py
 ```
 
 > As etapas devem ser executadas **nessa ordem** — cada etapa depende da anterior.
 
 ---
 
+## Great Expectations — Validação de Dados
+
+### Como executar
+```bash
+python scripts/06_great_expectations.py
+```
+
+### Expectativas implementadas
+
+| # | Expectativa | Coluna |
+|---|-------------|--------|
+| 1 | Valores não nulos | age, gender, anxiety_score, depression_score |
+| 2 | Valores entre 0 e 10 | anxiety_score, depression_score, happiness_score, stress_level, addiction_level |
+| 3 | Valores válidos | gender (Male, Female, Other) |
+| 4 | Valores entre 0 e 24 | daily_gaming_hours |
+| 5 | Total de linhas entre 100.000 e 2.000.000 | — |
+
+### Problema de qualidade identificado
+
+| Coluna | Problema | Ação |
+|--------|----------|------|
+| daily_gaming_hours | Valores acima de 24h encontrados — fisicamente impossível | Documentado como problema de qualidade. Recomenda-se filtrar na camada Silver em versões futuras. |
+
+---
+
+## Dashboard — Metabase
+
+Após subir os containers, acessa em: `http://localhost:3000`
+Dashboard com painéis criados: '[http://localhost:3000/dashboard/2-atividade-lab01-b](url)'
+
+Credenciais de conexão usadas internamente pelo Metabase:
+
+| Campo | Valor |
+|-------|-------|
+| Host | postgres |
+| Port | 5432 |
+| Database | lab01 |
+| Username | postgres |
+| Password | postgres |
+
+### Visualizações criadas
+1. Depressão por faixa etária
+2. Depressão por gênero
+3. Usa headset?
+4. Renda média por faixa etária
+5. Trabalhadores por faixa etária
+6. Influência de café no sono
+
+---
+
 ## Modelagem — Star Schema
 
-O modelo adotado é o **Star Schema**, com uma tabela fato central e quatro tabelas de dimensão. O `player_id` é a chave primária (PK) em todas as tabelas.
-```
-          dim_comportamento
-                 |
-dim_jogador — fato_saude_mental — dim_habitos
-                 |
-            dim_social
-```
-
-### Tabela fato — `fato_saude_mental`
-Contém as métricas numéricas de saúde mental de cada jogador.
-
-| Coluna | Descrição |
-|--------|-----------|
-| player_id | Chave estrangeira (FK) para as dimensões |
-| stress_level | Score de estresse |
-| anxiety_score | Score de ansiedade |
-| depression_score | Score de depressão |
-| addiction_level | Nível de vício em jogos |
-| happiness_score | Score de felicidade |
-| aggression_score | Score de agressividade |
-| academic_performance | Score de performance acadêmica |
-| work_productivity | Score de produtividade no trabalho |
-| eye_strain_score | Score de cansaço ocular |
-| back_pain_score | Score de dor nas costas |
-
-### Dimensão — `dim_jogador`
-Perfil demográfico do jogador.
-
-| Coluna | Descrição |
-|--------|-----------|
-| player_id | Chave primária (PK) |
-| age | Idade |
-| gender | Gênero |
-| income | Renda anual |
-| bmi | Índice de Massa Corporal (IMC) |
-
-### Dimensão — `dim_habitos`
-Hábitos de jogo e rotina diária.
-
-| Coluna | Descrição |
-|--------|-----------|
-| player_id | Chave primária (PK) |
-| daily_gaming_hours | Horas de jogo por dia |
-| weekly_sessions | Sessões de jogo por semana |
-| years_gaming | Anos de experiência com jogos |
-| sleep_hours | Média de horas de sono por dia |
-| caffeine_intake | Quantidade de cafeína ingerida |
-| exercise_hours | Horas de exercício por dia |
-| weekend_gaming_hours | Horas jogadas nos fins de semana |
-| screen_time_total | Tempo total de tela |
-| streaming_hours | Horas assistindo streaming |
-
-### Dimensão — `dim_comportamento`
-Comportamento e preferências online.
-
-| Coluna | Descrição |
-|--------|-----------|
-| player_id | Chave primária (PK) |
-| multiplayer_ratio | Proporção de sessões multiplayer |
-| toxic_exposure | Exposição a ambientes tóxicos |
-| violent_games_ratio | Proporção de jogos violentos |
-| mobile_gaming_ratio | Proporção de jogos mobile |
-| night_gaming_ratio | Proporção de sessões noturnas |
-| esports_interest | Interesse em e-sports (sim/não) |
-| headset_usage | Uso de headset (sim/não) |
-| microtransactions_spending | Gasto em microtransações |
-| competitive_rank | Ranking competitivo |
-| internet_quality | Qualidade da conexão de internet |
-
-### Dimensão — `dim_social`
-Vida social e interações do jogador.
-
-| Coluna | Descrição |
-|--------|-----------|
-| player_id | Chave primária (PK) |
-| friends_gaming_count | Quantidade de amigos que jogam |
-| online_friends | Quantidade de amigos online |
-| social_interaction_score | Score de interação social |
-| relationship_satisfaction | Score de satisfação no relacionamento |
-| loneliness_score | Score de solidão |
-| parental_supervision | Tem supervisão parental? (sim/não) |
-
----
-
-## Métricas de Negócio
-
-As 5 queries executadas em `data/gold/metricas.py` respondem às seguintes perguntas:
-
-| # | Pergunta |
-|---|----------|
-| M1 | Qual faixa de horas de jogo diárias está associada ao maior score de ansiedade? |
-| M2 | Qual gênero apresenta maior nível médio de vício em jogos? |
-| M3 | Jogadores com alta exposição a conteúdo tóxico têm maior agressividade? |
-| M4 | Jogadores que dormem mais de 7h têm melhor saúde mental? |
-| M5 | Jogadores com mais amigos online se sentem menos solitários? |
-
----
-
-## Qualidade dos Dados
-
-| Problema | Ação tomada |
-|----------|-------------|
-| Nenhum valor nulo encontrado | Nenhuma imputação necessária |
-| Duplicatas | Verificadas e removidas |
-| Tipos inconsistentes | Colunas binárias convertidas para `bool`, `gender` para `category` |
-| Nomes de colunas | Padronizados para `snake_case` |
+| Tabela | Tipo | Descrição |
+|--------|------|-----------|
+| fato_saude_mental | Fato | Métricas de saúde mental |
+| dim_jogador | Dimensão | Perfil demográfico |
+| dim_habitos | Dimensão | Hábitos de jogo e rotina |
+| dim_comportamento | Dimensão | Comportamento online |
+| dim_social | Dimensão | Vida social |
 
 ---
 
 ## Dificuldades Encontradas
 
-- Entendimento do Star Schema e como implementá-lo na prática com o dataset
-- Configuração da conexão com o PostgreSQL (PATH, credenciais, banco correto)
-- O Stack Builder do PostgreSQL não conectava ao servidor — resolvido instalando o DBeaver separadamente
+- Configuração da rede Docker para comunicação entre containers
+- API do Great Expectations mudou na versão 1.x — necessário adaptar o script
+- Valores inconsistentes em `daily_gaming_hours` (acima de 24h) identificados pelo GX
+- Organização das pastas entre Lab01-A e Lab01-B durante o desenvolvimento
