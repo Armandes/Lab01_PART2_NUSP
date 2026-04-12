@@ -21,3 +21,6 @@ Dashboards, conexões e usuário do Metabase agora persistem entre reinicializa�
 
 **Atenção:**
 Por conta de compatibilidade, foi necessário substituir um novo arquivo docker-compose, mas o histórico ainda está preservado.
+
+Imagem do dashboard:
+![Dashboard 1](Dashboard.png)
